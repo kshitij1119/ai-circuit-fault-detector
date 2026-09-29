@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-circuit-fault-detector"
+version = "0.1.0"
+description = "A small, reproducible machine-learning baseline for classifying circuit faults from sensor measurements."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+dependencies = ["pandas>=2.0,<4.0", "scikit-learn>=1.4,<2.0", "joblib>=1.3,<2.0"]
+
+[project.scripts]
+circuit-fault = "circuit_fault_detector.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["circuit_fault_detector*"]
