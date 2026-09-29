@@ -70,17 +70,16 @@ data/                    Dataset guidance; generated data is local
 models/                  Local model output directory
 ```
 
-## GitHub setup
+## GitHub repository
 
-Create an empty repository on GitHub, then add its URL and push this branch:
+This project is hosted at [github.com/kshitij1119/ai-circuit-fault-detector](https://github.com/kshitij1119/ai-circuit-fault-detector). Clone it with:
 
 ```bash
-git remote add origin https://github.com/YOUR-USERNAME/ai-circuit-fault-detector.git
-git add .
-git commit -m "Create AI circuit fault detector project"
-git push -u origin master
+git clone https://github.com/kshitij1119/ai-circuit-fault-detector.git
+cd ai-circuit-fault-detector
 ```
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
