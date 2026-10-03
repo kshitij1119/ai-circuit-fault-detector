@@ -1,85 +1,108 @@
 # AI Circuit Fault Detector
 
-A small Python machine-learning baseline for classifying circuit states from tabular sensor readings. It includes a reproducible synthetic-data generator, a Random Forest training pipeline, evaluation metrics, and batch CSV inference.
+An ECE project that simulates a Sallen–Key band-pass circuit in LTspice, extracts signal features from transient waveforms, and compares a Random Forest with a 1D convolutional neural network.
 
-> **Safety and scope:** This is an educational prototype. The included data is synthetic and the model is not validated for real circuits, safety monitoring, or control decisions. Do not connect it to live equipment or rely on predictions to prevent harm. Validate any real deployment with representative measurements and qualified engineering review.
+> **Research prototype:** this repository is for simulation and education. The circuit model and classifier have not been validated on physical hardware. Do not connect it to live equipment or use predictions for safety or control decisions. The six fault classes are modelled approximations; validate against the actual op-amp, component parasitics, and measured circuits before making engineering claims.
 
-## Fault classes
+## Circuit under test
 
-The demonstration generator creates examples for `normal`, `open_circuit`, `short_circuit`, `overload`, and `component_drift`. Features are supply voltage (V), load current (A), resistance (Ω), and temperature (°C). These simplified distributions exist to exercise the software pipeline; they do not represent a particular circuit or sensor.
+The reference design cascades a first-order RC high-pass input with a second-order Sallen–Key low-pass stage. Its nominal component values are in [`circuits/sallen_key_bandpass.inc`](circuits/sallen_key_bandpass.inc); [`circuits/sallen_key_bandpass.asc`](circuits/sallen_key_bandpass.asc) is the LTspice entry point and [`circuits/sallen_key_bandpass.cir`](circuits/sallen_key_bandpass.cir) is the healthy netlist.
 
-## Quick start
+| Code | Label | Circuit intervention |
+| --- | --- | --- |
+| F0 | Healthy | Nominal circuit; healthy components vary by ±10% |
+| F1 | R1-open | R1 replaced by 1 TΩ leakage |
+| F2 | R2-short | R2 replaced by 1 mΩ |
+| F3 | C1-open | C1 replaced by 1 fF leakage |
+| F4 | C2-short | A 1 mΩ path bypasses C2 |
+| F5 | Opamp-degraded | Behavioral op-amp open-loop gain reduced to 20 and output resistance raised to 50 kΩ |
 
-Requires Python 3.10 or newer.
+The op-amp is a bounded behavioral model to keep the simulation self-contained. It is not a vendor macromodel. Inspect and adapt the deck if the project plan requires a specific amplifier part number.
 
-```bash
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# macOS/Linux: source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pip install -e .
-circuit-fault generate-data
-circuit-fault train
+## Requirements
+
+- Python 3.10 or newer
+- Analog Devices LTspice installed
+- Git access to this private repository
+
+## Install on Windows
+
+```powershell
+git clone https://github.com/kshitij1119/ai-circuit-fault-detector.git
+cd ai-circuit-fault-detector
+py -3.10 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e ".[all]"
 ```
 
-You can also invoke it without installing the package as a command:
+The `all` extra includes PyLTSpice, Streamlit, plotting dependencies, and PyTorch. If you only need the Random Forest workflow, `python -m pip install -e ".[simulation,app]"` installs the simulator and dashboard without PyTorch. LTspice is discovered from common Windows install locations; if it is installed elsewhere, pass `--ltspice` or set the `LTSPICE_EXE` environment variable.
 
-```bash
-python -m circuit_fault_detector.cli generate-data
-python -m circuit_fault_detector.cli train
+## Run the pipeline
+
+First run six simulations to check that LTspice launches correctly:
+
+```powershell
+python simulate.py --ltspice "C:\Users\ksp54\AppData\Local\Programs\ADI\LTspice\LTspice.exe" --limit 6
 ```
 
-## Predict from your readings
+Then generate the planned dataset of 1,200 transients (200 tolerance samples per fault class):
 
-Create a CSV with one row per observation and these numeric columns (order does not matter):
-
-```csv
-supply_voltage_v,load_current_a,resistance_ohm,temperature_c
-12.1,0.12,100.8,31.4
+```powershell
+python simulate.py --samples-per-class 200 --seed 42
+python extract_features.py
+python train.py
+python train_cnn.py
+python eda.py
 ```
 
-Then run:
+The simulation output is written to `data/ltspice/`: a manifest, one time/input/output CSV per run, and LTspice RAW/LOG files. `extract_features.py` produces `data/processed/features.csv`. The RF and CNN metrics and plots are written under `reports/`; the RF model is saved in `models/`. The repository includes six small LTspice demo waveforms, a pretrained RF model, and the RF/EDA report outputs so the app can run immediately after installation. Full generated datasets, LTspice RAW/LOG files, and CNN checkpoints remain local because they are reproducible outputs.
 
-```bash
-circuit-fault predict --input readings.csv --output predictions.csv
+### Waveform features
+
+The feature model uses the eight planned features: peak amplitude, RMS, 10–90% rise time, settling time, total harmonic distortion (THD), zero-crossing count, standard deviation, and skewness. Timing features are measured on the first rising edge and full-cycle envelopes; the definitions are documented in [`circuit_fault_detector/features.py`](circuit_fault_detector/features.py). THD uses the 1 kHz input fundamental by default; use `--fundamental-hz` if you change the stimulus.
+
+### Streamlit demo
+
+Run the dashboard:
+
+```powershell
+streamlit run streamlit_app.py
 ```
 
-Output rows retain the input columns and add `predicted_fault` and `confidence`. Confidence is the model's maximum class probability, not a guarantee of correctness. The model file is created locally at `models/circuit_fault_model.joblib` and is not committed.
+Demo Mode selects one of six included LTspice transients and uses the pretrained RF model. CSV upload accepts `time_s` and `output_v` columns. The app plots the waveform, displays all eight features, and shows predicted class probabilities.
 
-## Train on labeled measurements
+## EDA and evaluation
 
-Provide a CSV containing all four features plus a `fault_type` target column. Use labels that are consistent with your data collection protocol. Then run:
+`notebooks/eda.ipynb` and `eda.py` plot representative traces, feature distributions, and feature correlations. The RF uses a stratified 80/20 hold-out split and reports accuracy, precision, recall, F1, confusion matrix, and feature importance. The CNN uses stratified train/validation/test splits, selects the checkpoint by validation loss, and reports test metrics. Reference results from the included LTspice-generated dataset are listed below.
 
-```bash
-circuit-fault train --data path/to/labeled_readings.csv --model models/site_model.joblib
-```
+### Reference run
 
-The command makes a stratified train/test split and prints accuracy and per-class precision, recall, and F1. Evaluate on data collected independently from training where possible; random row splits can overstate performance when measurements from the same circuit or session appear in both sets.
+The checked-in report snapshot was generated from 1,200 LTspice simulations (200 per class, seed 42). Both models used the same stratified 20% test split. The RF used 500 trees; the CNN ran for five epochs for this reference run.
 
-## Commands
+| Model | Held-out accuracy | Evaluation |
+| --- | ---: | --- |
+| Random Forest, eight extracted features | 100.0% | [`reports/random_forest_metrics.json`](reports/random_forest_metrics.json) |
+| 1D-CNN, raw waveforms | 89.2% | [`reports/cnn_metrics.json`](reports/cnn_metrics.json) |
 
-- `generate-data --output PATH --rows-per-class N --seed N`: generate synthetic demo data.
-- `train --data PATH --model PATH --seed N`: fit and evaluate a classifier.
-- `predict --model PATH --input PATH --output PATH`: classify CSV readings.
+These are simulation-only results for this circuit model and seeded dataset. The perfect RF score indicates the modeled fault classes are readily separable under these assumptions; it is not evidence of performance on measured hardware.
 
 ## Repository layout
 
 ```text
-circuit_fault_detector/  Python package and CLI
-data/                    Dataset guidance; generated data is local
-models/                  Local model output directory
-```
-
-## GitHub repository
-
-This project is hosted at [github.com/kshitij1119/ai-circuit-fault-detector](https://github.com/kshitij1119/ai-circuit-fault-detector). Clone it with:
-
-```bash
-git clone https://github.com/kshitij1119/ai-circuit-fault-detector.git
-cd ai-circuit-fault-detector
+circuit_fault_detector/  faults, waveform features, simulation, RF model, CLI
+circuits/                LTspice reference deck and fault definitions
+data/                    Six included demo waveforms; full dataset is local
+models/                  Pretrained RF model; CNN checkpoints are local
+notebooks/               EDA notebook
+reports/                 RF evaluation metrics and EDA figures
+simulate.py              LTspice batch dataset generator
+extract_features.py      Waveform feature extraction
+train.py                 Random Forest training/evaluation
+train_cnn.py             Raw-waveform 1D-CNN training/evaluation
+streamlit_app.py         Local web demo
 ```
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
-

@@ -5,14 +5,21 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ai-circuit-fault-detector"
 version = "0.1.0"
-description = "A small, reproducible machine-learning baseline for classifying circuit faults from sensor measurements."
+description = "LTspice waveform simulation and machine-learning classification for circuit faults."
 readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}
-dependencies = ["pandas>=2.0,<4.0", "scikit-learn>=1.4,<2.0", "joblib>=1.3,<2.0"]
+dependencies = ["pandas>=2.0,<4.0", "scikit-learn>=1.4,<2.0", "joblib>=1.3,<2.0", "matplotlib>=3.8,<4.0"]
+
+[project.optional-dependencies]
+simulation = ["PyLTSpice>=5.4,<6.0"]
+app = ["streamlit>=1.40,<2.0", "seaborn>=0.13,<1.0"]
+cnn = ["torch>=2.2,<3.0"]
+all = ["PyLTSpice>=5.4,<6.0", "streamlit>=1.40,<2.0", "seaborn>=0.13,<1.0", "torch>=2.2,<3.0"]
 
 [project.scripts]
 circuit-fault = "circuit_fault_detector.cli:main"
+simulate-circuit-faults = "circuit_fault_detector.simulation:main"
 
 [tool.setuptools.packages.find]
 include = ["circuit_fault_detector*"]

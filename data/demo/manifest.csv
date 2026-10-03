@@ -1,0 +1,7 @@
+"sample_id","fault_code","fault_label","waveform_path","points","seed"
+"F0_0000","F0","F0_Healthy","waveforms/F0_Healthy/F0_0000.csv","14466","42"
+"F1_0000","F1","F1_R1-open","waveforms/F1_R1-open/F1_0000.csv","13191","42"
+"F2_0000","F2","F2_R2-short","waveforms/F2_R2-short/F2_0000.csv","7710","42"
+"F3_0000","F3","F3_C1-open","waveforms/F3_C1-open/F3_0000.csv","11515","42"
+"F4_0000","F4","F4_C2-short","waveforms/F4_C2-short/F4_0000.csv","5018","42"
+"F5_0000","F5","F5_Opamp-degraded","waveforms/F5_Opamp-degraded/F5_0000.csv","8524","42"

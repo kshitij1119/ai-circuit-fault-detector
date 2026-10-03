@@ -1,0 +1,7 @@
+code,label,component,intervention
+F0,F0_Healthy,none,nominal values with ±10% healthy-component tolerance
+F1,F1_R1-open,R1,open represented by 1e12 ohm
+F2,F2_R2-short,R2,short represented by 1e-3 ohm
+F3,F3_C1-open,C1,open represented by 1e-15 farad
+F4,F4_C2-short,C2,1 mΩ resistor bypasses C2
+F5,F5_Opamp-degraded,BOP,open-loop gain 20 and output resistance 50 kohm

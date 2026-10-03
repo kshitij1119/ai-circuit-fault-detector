@@ -9,6 +9,14 @@ venv/
 htmlcov/
 build/
 dist/
+*.raw
+*.log
+*.net
 models/*.joblib
 !models/.gitkeep
+!models/random_forest.joblib
 data/generated/
+data/ltspice/
+data/processed/
+models/*.pt
+models/*.pth

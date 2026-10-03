@@ -1,48 +1,65 @@
-"""Command line interface."""
+"""Unified command line interface for the circuit-fault workflow."""
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
-import pandas as pd
-
-from .data import save_dataset
-from .model import predict, train_model
-
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="circuit-fault", description="Classify circuit faults from sensor readings.")
+    parser = argparse.ArgumentParser(prog="circuit-fault", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    generate = commands.add_parser("generate-data", help="create a synthetic demo dataset")
-    generate.add_argument("--output", default="data/synthetic_circuit_readings.csv")
-    generate.add_argument("--rows-per-class", type=int, default=200)
-    generate.add_argument("--seed", type=int, default=42)
-    train = commands.add_parser("train", help="train a classifier and print evaluation metrics")
-    train.add_argument("--data", default="data/synthetic_circuit_readings.csv")
-    train.add_argument("--model", default="models/circuit_fault_model.joblib")
-    train.add_argument("--seed", type=int, default=42)
-    infer = commands.add_parser("predict", help="predict labels for a CSV of sensor readings")
-    infer.add_argument("--model", default="models/circuit_fault_model.joblib")
-    infer.add_argument("--input", required=True)
-    infer.add_argument("--output", default="predictions.csv")
-    args = parser.parse_args()
 
-    if args.command == "generate-data":
-        path = save_dataset(args.output, args.rows_per_class, args.seed)
-        print(f"Wrote synthetic demo data to {path}")
+    simulate = commands.add_parser("simulate", help="generate LTspice waveform CSVs")
+    simulate.add_argument("--output", default="data/ltspice")
+    simulate.add_argument("--samples-per-class", type=int, default=200)
+    simulate.add_argument("--seed", type=int, default=42)
+    simulate.add_argument("--ltspice", help="LTspice executable path")
+    simulate.add_argument("--limit", type=int, help="small smoke run limit")
+
+    extract = commands.add_parser("extract", help="extract the eight planned waveform features")
+    extract.add_argument("--manifest", default="data/ltspice/manifest.csv")
+    extract.add_argument("--output", default="data/processed/features.csv")
+    extract.add_argument("--fundamental-hz", type=float, default=1000.0)
+
+    train = commands.add_parser("train", help="train/evaluate the Random Forest model")
+    train.add_argument("--features", default="data/processed/features.csv")
+    train.add_argument("--model", default="models/random_forest.joblib")
+    train.add_argument("--reports", default="reports")
+    train.add_argument("--seed", type=int, default=42)
+
+    predict = commands.add_parser("predict", help="classify a single waveform CSV")
+    predict.add_argument("--input", required=True)
+    predict.add_argument("--model", default="models/random_forest.joblib")
+    predict.add_argument("--fundamental-hz", type=float, default=1000.0)
+
+    args = parser.parse_args()
+    if args.command == "simulate":
+        from .simulation import generate_waveforms
+        result = generate_waveforms(args.output, args.samples_per_class, args.seed, args.ltspice, args.limit)
+        print(f"Waveform manifest written to {result}")
+    elif args.command == "extract":
+        from .features import extract_manifest
+        result = extract_manifest(args.manifest, args.output, args.fundamental_hz)
+        print(f"Feature table written to {result}")
     elif args.command == "train":
-        result = train_model(args.data, args.model, args.seed)
-        print(f"Accuracy: {result['accuracy']:.3f}")
-        print(result["report"])
+        from .model import train_random_forest
+        result = train_random_forest(args.features, args.model, args.reports, args.seed)
+        print(f"Held-out accuracy: {result['accuracy']:.3f}")
         print(f"Saved model to {result['model_path']}")
     else:
-        readings = pd.read_csv(args.input)
-        result = predict(args.model, readings)
-        output = Path(args.output)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        result.to_csv(output, index=False)
-        print(f"Wrote predictions to {output}")
+        import pandas as pd
+        from .features import FEATURE_COLUMNS, extract_features
+        from .model import load_model, predict_features
+        waveform = pd.read_csv(args.input)
+        if not {"time_s", "output_v"}.issubset(waveform.columns):
+            raise ValueError("Input CSV must contain time_s and output_v columns")
+        features = pd.DataFrame([extract_features(waveform.time_s, waveform.output_v, args.fundamental_hz)], columns=FEATURE_COLUMNS)
+        model, _ = load_model(args.model)
+        label, confidence, probabilities = predict_features(model, features)
+        print(f"Prediction: {label} ({confidence:.1%})")
+        for class_name, probability in sorted(probabilities.items(), key=lambda item: -item[1]):
+            print(f"  {class_name}: {probability:.1%}")
 
 
 if __name__ == "__main__":
